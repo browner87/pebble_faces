@@ -1,0 +1,32 @@
+{
+    "author": "EndlessDIY",
+    "dependencies": {},
+    "keywords": [],
+    "name": "tester",
+    "pebble": {
+        "displayName": "Test_Watch_Face_1",
+        "enableMultiJS": false,
+        "messageKeys": [],
+        "projectType": "native",
+        "resources": {
+            "media": [
+                {
+                    "characterRegex": "[0-9:A-Za-z ]",
+                    "file": "fonts/EXO_BLACK_49",
+                    "name": "EXO_BLACK_49",
+                    "targetPlatforms": null,
+                    "type": "font"
+                }
+            ]
+        },
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "basalt"
+        ],
+        "uuid": "2f245767-c507-40d7-bc66-8059def28e16",
+        "watchapp": {
+            "watchface": true
+        }
+    },
+    "version": "0.1.0"
+}
