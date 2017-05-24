@@ -49,22 +49,25 @@ static void update_time(struct tm *tick_time, TimeUnits units_changed) {
     // Date section - only necessary once a day
     if(tick_time->tm_mday != s_today){
         s_today = tick_time->tm_mday;
-        static char s_date_buffer[13]; // MMMM-DD-YYYY\0
-        static char s_day_buffer[10]; // WEDNESDAY\0
+        static char s_day_buffer[21]; // WEDNESDAY, SEPTEMBER\0
+        static char s_date_buffer[11]; // YYYY-MM-DD\0
         
-        strftime(s_date_buffer, sizeof(s_date_buffer), "%b-%d-%Y", tick_time);
+        strftime(s_date_buffer, sizeof(s_date_buffer), "%Y-%m-%d", tick_time);  // %F aka ISO-8601 date
         make_up(s_date_buffer, 5); // strftime upper case modifier doesn't work
         text_layer_set_text(s_date_layer, s_date_buffer);
         // Update day of week too
-        strftime(s_day_buffer, sizeof(s_date_buffer), "%A", tick_time);
-        make_up(s_date_buffer, 10);
+        //strcpy(s_day_buffer, "Wednesday, September");
+        strftime(s_day_buffer, sizeof(s_day_buffer), "%A-%B", tick_time);
         text_layer_set_text(s_day_layer, s_day_buffer);
     }
 }
 
-static void update_battery(Layer *layer, GContext *ctx) {
+static void update_topbar(Layer *layer, GContext *ctx) {
     static char s_num_buffer[4]; // 0-100
-    GRect bounds = layer_get_bounds(layer);
+    GRect layer_bounds = layer_get_bounds(layer);
+    
+    //////////////////////////////////////////////////
+    // Battery Bar    
     GColor8 color = (  // Changing battery/text color based on charge level
         s_battery_level>20?(
             s_battery_level>30?
@@ -72,27 +75,70 @@ static void update_battery(Layer *layer, GContext *ctx) {
                  GColorYellow
         ):GColorRed
     );
+    
     // Find the width of the bar (total width = 114px)
     int width = (s_battery_level * bbar_w) / 100;
-    
+    int bx = layer_bounds.size.w-bbar_w-5;
+    int by = 5;
+    int bw = bbar_w;
+    int bh = bbar_h;
     // Draw the icon background
     graphics_context_set_fill_color(ctx, GColorWhite);
-    graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(bx,by,bw,bh), 0, GCornerNone);
     // Draw the icon fill
     graphics_context_set_fill_color(ctx, color);
     graphics_fill_rect(
         ctx, 
-        GRect(bounds.size.w-width, 0, bounds.size.w, bounds.size.h), 
+        GRect(bx+bw-width, by, width, bh), 
         0, GCornerNone
     );
     // Black squares to make battery shape
     graphics_context_set_fill_color(ctx, GColorBlack);
-    graphics_fill_rect(ctx, GRect(0, 0, 4, bbar_h/4), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(0, bbar_h-(bbar_h/4), 4, bbar_h/4), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(bx+bw-bbar_w, by, 4, bbar_h/4), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(bx+bw-bbar_w, by+bbar_h-(bbar_h/4), 4, bbar_h/4), 0, GCornerNone);
     // Write the battery level
     snprintf(s_num_buffer, 4, "%d", s_battery_level);
     text_layer_set_text(s_battery_text_layer, s_num_buffer);
     text_layer_set_text_color(s_battery_text_layer, color);
+    
+    //////////////////////////////////////////////////
+    // Icon for silent mode
+    if( quiet_time_is_active() ){
+        // Draw the speaker
+        int sx = 5; // Move over when we get a small weather
+        int sy = 5;
+        int sw = 20;
+        int sh = 15;
+        graphics_context_set_fill_color(ctx, GColorRed);
+        graphics_context_set_stroke_color(ctx, GColorRed);
+        
+        // Magnet
+        graphics_fill_rect(ctx, GRect(sx, sy+(sh/5)+1, sw/5, sh-2*(sh/5)-1), 0, GCornerNone);
+        // Speaker
+        GPathInfo spkrpts = {
+            4, 
+            (GPoint[]) {
+                {sx+sw/5  , sy+(sh/5)}, // Top right point of magnet
+                {sx+2*sw/5, sy},        // Top corner
+                {sx+2*sw/5, sy+sh},     // Bottom corner
+                {sx+sw/5  , sy+sh-sh/5} // Bottom right point of magnet
+            }
+        };
+        GPath *spkrpts_ptr = gpath_create(&spkrpts);
+        gpath_draw_outline(ctx, spkrpts_ptr); // Apparently filled doesn't do an outline too...
+        gpath_draw_filled(ctx, spkrpts_ptr);
+        gpath_destroy(spkrpts_ptr);
+        // X
+        graphics_context_set_stroke_width(ctx, 3);
+        graphics_draw_line(ctx, GPoint(sx+sw/2+4,sy+sh-4), GPoint(sx+sw, sy+4));
+        graphics_draw_line(ctx, GPoint(sx+sw/2+4,sy+4), GPoint(sx+sw, sy+sh-4));
+    }
+    
+    //////////////////////////////////////////////////
+    // Icon for weather
+    if( false ){ // TODO: Do
+        layer_mark_dirty(s_battery_layer); // Redraw the top bar with the graphics
+    }
 }
 
 static void update_topline(Layer *layer, GContext *ctx) { // Divider line
@@ -128,7 +174,7 @@ static void battery_callback(BatteryChargeState state) {
 
 static void bluetooth_callback(bool connected) {
     if(!connected) {
-        text_layer_set_text_color(s_time_layer, GColorBlue);
+        text_layer_set_text_color(s_time_layer, GColorVividCerulean);
         vibes_long_pulse();
     }else{
         text_layer_set_text_color(s_time_layer, GColorWhite);
@@ -167,7 +213,7 @@ static void main_window_load(Window *window) {
     );
     text_layer_set_background_color(s_date_layer, GColorClear);
     text_layer_set_text_color(s_date_layer, GColorWhite);
-    text_layer_set_text(s_date_layer, "JAN-01-1970");
+    text_layer_set_text(s_date_layer, "1970-01-01");
     s_today = 40; // No month has 40 days, so force redraw on first run
     text_layer_set_font(s_date_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
     text_layer_set_text_alignment(s_date_layer, GTextAlignmentCenter);
@@ -182,7 +228,7 @@ static void main_window_load(Window *window) {
     text_layer_set_background_color(s_day_layer, GColorClear);
     text_layer_set_text_color(s_day_layer, GColorWhite);
     text_layer_set_text(s_day_layer, "FRAPTIOUS");
-    text_layer_set_font(s_day_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    text_layer_set_font(s_day_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD));
     text_layer_set_text_alignment(s_day_layer, GTextAlignmentCenter);
     // Add to window
     layer_add_child(window_layer, text_layer_get_layer(s_day_layer));    
@@ -190,9 +236,9 @@ static void main_window_load(Window *window) {
     //////////////////////////////////////////////////
     // BATTERY
     s_battery_layer = layer_create(
-        GRect(bounds.size.w-bbar_w-5, 5, bbar_w, bbar_h)
+        GRect(0, 0, bounds.size.w, bounds.size.h)
     );
-    layer_set_update_proc(s_battery_layer, update_battery);
+    layer_set_update_proc(s_battery_layer, update_topbar);
     layer_add_child(window_layer, s_battery_layer);
     // BATTERY text
     s_battery_text_layer = text_layer_create( 
